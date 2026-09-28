@@ -1,0 +1,60 @@
+name: amnezia-tg
+
+x-runtime: &runtime
+  restart: unless-stopped
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:rw,nosuid,noexec,size=16m"]
+  pids_limit: 128
+  mem_limit: 256m
+  cpus: 0.5
+  logging:
+    driver: json-file
+    options: {max-size: "3m", max-file: "2"}
+
+services:
+  manager:
+    <<: *runtime
+    build: {context: ., target: manager}
+    image: amnezia-tg-manager:0.1
+    environment:
+      DATA_DIR: /data
+      MANAGER_SOCKET: /run/manager/manager.sock
+      VPN_IMAGE: amnezia-tg-awg:3.1
+      VPN_DATA_VOLUME: amnezia_tg_data
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - vpn-data:/data
+      - manager-socket:/run/manager
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio; from amnezia_bot.rpc import ManagerClient; asyncio.run(ManagerClient('/run/manager/manager.sock').call('status'))"]
+      interval: 15s
+      timeout: 10s
+      retries: 4
+      start_period: 15s
+
+  bot:
+    <<: *runtime
+    build: {context: ., target: bot}
+    image: amnezia-tg-bot:0.1
+    user: "10001:10001"
+    cap_drop: [ALL]
+    environment:
+      ADMIN_IDS: ${ADMIN_IDS:?Set ADMIN_IDS to allowed numeric Telegram user IDs}
+      BOT_TOKEN_FILE: /run/secrets/bot_token
+      MANAGER_SOCKET: /run/manager/manager.sock
+      BOT_PREFERENCES: /bot-data/preferences.json
+    volumes:
+      - ./secrets/bot_token:/run/secrets/bot_token:ro
+      - manager-socket:/run/manager:ro
+      - bot-data:/bot-data
+    depends_on:
+      manager: {condition: service_healthy}
+
+volumes:
+  vpn-data:
+    name: amnezia_tg_data
+  manager-socket:
+    name: amnezia_tg_socket
+  bot-data:
+    name: amnezia_tg_bot_data

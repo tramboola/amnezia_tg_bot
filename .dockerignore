@@ -1,0 +1,14 @@
+.git
+.venv
+.env
+secrets
+data
+work
+checks
+.superpowers
+.pytest_cache
+.ruff_cache
+__pycache__
+.worktrees
+tests
+.docs
